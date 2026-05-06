@@ -51,7 +51,7 @@ export function updateReceipt(db: Database, id: string, patch: Partial<Receipt>)
   if (!existing) throw new Error(`Receipt ${id} not found`);
 
   const current = rowToReceipt(existing);
-  const merged: Receipt = { ...current, ...patch, id };
+  const merged: Receipt = { ...current, ...patch, id, updatedAt: new Date().toISOString() };
 
   db.prepare(`
     UPDATE receipts SET
@@ -75,11 +75,17 @@ export function updateReceipt(db: Database, id: string, patch: Partial<Receipt>)
 }
 
 function rowToReceipt(row: any): Receipt {
+  let lineItems: unknown;
+  try {
+    lineItems = JSON.parse(row.line_items);
+  } catch {
+    throw new Error(`Corrupt line_items JSON for receipt id=${row.id}`);
+  }
   return ReceiptSchema.parse({
     id: row.id,
     merchant: row.merchant,
     date: row.date,
-    lineItems: JSON.parse(row.line_items),
+    lineItems,
     total: row.total,
     currency: row.currency,
     rawLlmResponse: row.raw_llm_response ?? undefined,
