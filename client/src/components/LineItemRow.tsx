@@ -56,15 +56,17 @@ export function LineItemRow({ item, onChange, onDelete }: Props) {
           type="number"
           min="1"
           step="1"
-          placeholder="qty"
+          placeholder="—"
           value={item.quantity ?? ""}
           onChange={(e) => {
-            const val = parseInt(e.target.value);
-            onChange({ ...item, quantity: val > 0 ? val : undefined });
+            const qty = parseInt(e.target.value);
+            const unitPrice = item.amount / (item.quantity ?? 1);
+            const newQty = qty > 0 ? qty : undefined;
+            onChange({ ...item, quantity: newQty, amount: Math.round(unitPrice * (newQty ?? 1) * 100) / 100 });
           }}
           title="Quantity"
         />
-      ) : null}
+      ) : <div className="w-10" />}
 
       <select
         className="text-xs border rounded px-1 py-0.5 bg-white text-gray-600"
@@ -112,8 +114,11 @@ export function LineItemRow({ item, onChange, onDelete }: Props) {
           type="number"
           step="0.01"
           min="0"
-          value={item.amount}
-          onChange={(e) => onChange({ ...item, amount: parseFloat(e.target.value) || 0 })}
+          value={Math.round((item.amount / (item.quantity ?? 1)) * 100) / 100}
+          onChange={(e) => {
+            const unitPrice = parseFloat(e.target.value) || 0;
+            onChange({ ...item, amount: Math.round(unitPrice * (item.quantity ?? 1) * 100) / 100 });
+          }}
         />
       </div>
 

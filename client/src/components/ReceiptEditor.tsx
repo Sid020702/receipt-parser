@@ -112,6 +112,14 @@ export function ReceiptEditor({ receipt, imageUrl, onSave, isSaving }: Props) {
         {/* Line items */}
         <div>
           <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Line Items</label>
+          <div className="flex items-center gap-2 px-1 pb-1 text-xs font-medium text-gray-400 uppercase tracking-wide">
+            <div className="w-4" />
+            <div className="flex-1">Name</div>
+            <div className="w-10 text-center">Qty</div>
+            <div className="w-24 text-center">Type</div>
+            <div className="w-20 text-right">Unit Price</div>
+            <div className="w-4" />
+          </div>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={draft.lineItems.map((li) => li.id)} strategy={verticalListSortingStrategy}>
               <div className="divide-y divide-gray-100">
