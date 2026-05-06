@@ -1,7 +1,6 @@
 import { extractWithAzure, type AzureExtractResult } from "./azureDoc";
 import { extractWithGroq, type GroqExtractResult } from "./groq";
 import type { LineItem, Receipt } from "../types";
-import { v4 as uuidv4 } from "uuid";
 
 export async function withRetry<T>(
   fn: () => Promise<T>,
@@ -34,7 +33,7 @@ export function mergeResults(azure: AzureExtractResult, groq: GroqExtractResult)
     date: azure.date ?? groq.date,
     lineItems: azure.lineItems.length > 0 ? azure.lineItems : groq.lineItems,
     total: azure.total ?? groq.total,
-    currency: azure.currency !== "USD" ? azure.currency : groq.currency,
+    currency: azure.currency || groq.currency,
   };
 }
 
@@ -85,7 +84,7 @@ export async function extractReceipt(
         currency: "USD",
         parseStatus: "failed",
         imageUrl,
-        rawLlmResponse: azureError?.message,
+        rawLlmResponse: undefined,
       },
     };
   }

@@ -75,4 +75,25 @@ describe("mergeResults", () => {
     expect(merged.merchant).toBe("Azure Merchant");
     expect(merged.total).toBe(4.0);
   });
+
+  test("prefers Azure currency over Groq currency", () => {
+    const azure: AzureExtractResult = {
+      merchant: "Shop",
+      date: "2026-05-06",
+      lineItems: [],
+      total: 10.0,
+      currency: "USD",
+      hasLowConfidence: false,
+    };
+    const groq: GroqExtractResult = {
+      merchant: "Shop",
+      date: "2026-05-06",
+      lineItems: [],
+      total: 10.0,
+      currency: "EUR",
+      rawResponse: "{}",
+    };
+    const merged = mergeResults(azure, groq);
+    expect(merged.currency).toBe("USD");
+  });
 });
