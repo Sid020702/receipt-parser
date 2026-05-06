@@ -27,6 +27,7 @@ const GroqReceiptSchema = z.object({
     quantity: z.number().positive().nullable().optional(),
     amount: z.number().finite(),
     type: z.enum(["item", "tax", "discount", "tip", "fee", "other"]),
+    confidence: z.enum(["high", "low"]).default("high"),
     rawText: z.string().nullable().optional(),
   })),
   total: z.number().nullable(),
@@ -63,6 +64,7 @@ Return ONLY valid JSON matching this exact structure, no markdown, no explanatio
       "quantity": 1,
       "amount": 0.00,
       "type": "item|tax|discount|tip|fee|other",
+      "confidence": "high|low",
       "rawText": "original text from receipt if type is other"
     }
   ],
@@ -80,6 +82,7 @@ Rules:
 - Use type "other" for ANYTHING else that is an actual charge — surcharges, levies, loyalty adjustments, codes like "SVG CHG", "PB1", percentage charges. Always include rawText for "other" items.
 - Include "quantity" if explicitly shown on the receipt (e.g. "2x", "Qty: 3"). Omit if not shown.
 - "amount" is the line total (quantity × unit price), not the unit price.
+- Set "confidence" to "low" if you are uncertain about a value — e.g. blurry text, partially visible amount, ambiguous name. Set to "high" if you can clearly read it.
 - Amounts must be positive numbers (discounts too).
 - If the receipt uses comma as thousands separator (e.g. "24,000" means twenty-four thousand), parse accordingly — "24,000" = 24000, not 24.`;
 
@@ -116,21 +119,15 @@ Rules:
 
   const lineItems: LineItem[] = parsed.lineItems
     .filter((item) => item.name != null && item.name.trim() !== "" && !SUMMARY_PATTERN.test(item.name.trim()))
-    .map((item) => {
-      const isLowConfidence =
-        item.amount === 0 ||
-        item.type === "other" ||
-        (item.name?.trim().length ?? 0) <= 1;
-      return {
-        id: uuidv4(),
-        name: item.name!,
-        quantity: item.quantity ?? undefined,
-        amount: item.amount,
-        type: item.type,
-        confidence: (isLowConfidence ? "low" : "high") as const,
-        rawText: item.rawText ?? undefined,
-      };
-    });
+    .map((item) => ({
+      id: uuidv4(),
+      name: item.name!,
+      quantity: item.quantity ?? undefined,
+      amount: item.amount,
+      type: item.type,
+      confidence: item.confidence,
+      rawText: item.rawText ?? undefined,
+    }));
 
   return {
     merchant: parsed.merchant,
