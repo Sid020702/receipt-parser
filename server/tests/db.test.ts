@@ -50,4 +50,8 @@ describe("db", () => {
     const receipts = getReceipts(testDb);
     expect(receipts).toHaveLength(0);
   });
+
+  test("updateReceipt throws when receipt not found", () => {
+    expect(() => updateReceipt(testDb, "nonexistent-id", { merchant: "X" })).toThrow("Receipt nonexistent-id not found");
+  });
 });
