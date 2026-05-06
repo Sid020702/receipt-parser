@@ -67,15 +67,23 @@ export async function extractReceipt(
     console.error("[extractor] Azure failed:", azureError.message);
   }
 
+  const TOTAL_TOLERANCE = 0.05;
+  const azureLineItemsSum = azureResult
+    ? Math.round(azureResult.lineItems.reduce((acc, item) => acc + item.amount * (item.quantity ?? 1), 0) * 100) / 100
+    : 0;
+  const azureTotalMismatch = !!(azureResult?.total && azureResult.lineItems.length > 0 &&
+    Math.abs(azureLineItemsSum - azureResult.total) > TOTAL_TOLERANCE);
+
   const needsGroq =
     !azureResult ||
     azureResult.hasLowConfidence ||
     azureResult.lineItems.length === 0 ||
     !azureResult.total ||
-    !azureResult.merchant;
+    !azureResult.merchant ||
+    azureTotalMismatch;
 
   console.log(`[extractor] Needs Groq fallback: ${needsGroq}`, !azureResult ? "(no azure result)" :
-    `merchant=${azureResult.merchant}, total=${azureResult.total}, items=${azureResult.lineItems.length}, lowConf=${azureResult.hasLowConfidence}`);
+    `merchant=${azureResult.merchant}, total=${azureResult.total}, items=${azureResult.lineItems.length}, lowConf=${azureResult.hasLowConfidence}, totalMismatch=${azureTotalMismatch} (sum=${azureLineItemsSum})`);
 
   let groqResult: GroqExtractResult | null = null;
   let rawLlmResponse: string | undefined;
@@ -83,7 +91,9 @@ export async function extractReceipt(
   if (needsGroq) {
     try {
       console.log("[extractor] Calling Groq fallback...");
-      const azurePartial: AzurePartial | undefined = azureResult ?? undefined;
+      const azurePartial: AzurePartial | undefined = azureResult
+        ? { ...azureResult, lineItemsMismatch: azureTotalMismatch }
+        : undefined;
       groqResult = await withRetry(() => extractWithGroq(imageBuffer, mimeType, azurePartial), 3);
       rawLlmResponse = groqResult.rawResponse;
       console.log("[extractor] Groq result:", JSON.stringify({

@@ -48,6 +48,7 @@ export interface AzurePartial {
   total: number | null;
   currency: string;
   lineItems: LineItem[];
+  lineItemsMismatch?: boolean;
 }
 
 export async function extractWithGroq(imageBuffer: Buffer, mimeType: string, azurePartial?: AzurePartial): Promise<GroqExtractResult> {
@@ -65,7 +66,13 @@ export async function extractWithGroq(imageBuffer: Buffer, mimeType: string, azu
   if (azurePartial?.date) alreadyKnown.push(`- Date: "${azurePartial.date}" (already extracted, return as-is)`);
   if (azurePartial?.total) alreadyKnown.push(`- Total: ${azurePartial.total} (already extracted, return as-is)`);
   if (azurePartial?.currency) alreadyKnown.push(`- Currency: "${azurePartial.currency}" (already extracted, return as-is)`);
-  if (azurePartial?.lineItems.length) alreadyKnown.push(`- Line items: already extracted ${azurePartial.lineItems.length} items — return null for lineItems to reuse them, unless you can extract more`);
+  if (azurePartial?.lineItems.length) {
+    if (azurePartial.lineItemsMismatch) {
+      alreadyKnown.push(`- Line items: a previous extraction found ${azurePartial.lineItems.length} items but they do NOT sum to the total (${azurePartial.total}) — the list is incomplete. Re-extract ALL line items from the receipt carefully.`);
+    } else {
+      alreadyKnown.push(`- Line items: already extracted ${azurePartial.lineItems.length} items — return null for lineItems to reuse them, unless you can extract more.`);
+    }
+  }
 
   const knownSection = alreadyKnown.length > 0
     ? `\nA previous extraction already found:\n${alreadyKnown.join("\n")}\nFocus on filling in the missing fields. Do not contradict what was already found.\n`
