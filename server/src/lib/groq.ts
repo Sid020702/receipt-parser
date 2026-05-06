@@ -122,7 +122,7 @@ Rules:
       quantity: item.quantity ?? undefined,
       amount: item.amount,
       type: item.type,
-      confidence: "low" as const,
+      confidence: "high" as const,
       rawText: item.rawText ?? undefined,
     }));
 
