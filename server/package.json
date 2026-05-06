@@ -6,7 +6,6 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@azure/ai-form-recognizer": "^4.0.0",
     "groq-sdk": "^0.5.0",
     "hono": "^4.4.0",
     "sharp": "^0.34.5",

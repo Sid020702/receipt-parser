@@ -4,7 +4,7 @@ Upload a receipt photo → get structured data → review and correct inline →
 
 ## Stack
 
-- **Backend:** Bun + Hono + Azure Document Intelligence + Groq (fallback) + SQLite (`bun:sqlite`)
+- **Backend:** Bun + Hono + Groq (llama-4-scout vision) + SQLite (`bun:sqlite`)
 - **Frontend:** React 18 + Vite + Tailwind CSS + @dnd-kit (drag reorder) + Radix UI tooltips
 
 ## Quick Start
@@ -25,15 +25,8 @@ Edit `.env`:
 
 | Variable | Description |
 |---|---|
-| `AZURE_DOC_INTELLIGENCE_ENDPOINT` | Azure Form Recognizer endpoint URL |
-| `AZURE_DOC_INTELLIGENCE_KEY` | Azure Form Recognizer API key |
 | `GROQ_API_KEY` | Groq API key (free at console.groq.com) |
 | `PORT` | Server port (default: 3001) |
-
-**Getting Azure credentials:**
-1. Go to [portal.azure.com](https://portal.azure.com)
-2. Create a "Document Intelligence" resource (free tier: 500 pages/month)
-3. Copy endpoint and key from "Keys and Endpoint" tab
 
 **Getting Groq credentials:**
 1. Sign up at [console.groq.com](https://console.groq.com)
@@ -52,19 +45,19 @@ npm run dev
 
 ## What I Built
 
-A web app that takes a photo of a receipt and extracts structured data from it — merchant name, date, line items with quantities and types, total, and currency. It uses Azure Document Intelligence as the primary extractor and falls back to Groq (llama-4-scout) when Azure misses fields like merchant or returns low-confidence results. The extracted data is shown in an editable UI where users can correct any mistakes, reorder line items via drag and drop, and save to a local SQLite database. The frontend is React with Tailwind, the backend is Bun with Hono, and everything runs with a single `npm run dev`.
+A web app that takes a photo of a receipt and extracts structured data from it — merchant name, date, line items with quantities and types, total, and currency. It uses Groq's llama-4-scout vision model with 3 retries and exponential backoff to extract structured data from the image. The extracted data is shown in an editable UI where users can correct any mistakes, reorder line items via drag and drop, and save to a local SQLite database. The frontend is React with Tailwind, the backend is Bun with Hono, and everything runs with a single `npm run dev`.
 
 ---
 
 ## Tradeoffs I'd Defend
 
-**1. Azure Document Intelligence as primary extractor, not a general vision LLM**
+**1. Groq (llama-4-scout) over a purpose-built OCR model**
 
-Azure's prebuilt Receipt model returns typed, structured fields — merchant, date, line items, total — with per-field confidence scores, without any prompt engineering. A general vision LLM can hallucinate structure or misread amounts; Azure was trained specifically on receipts and handles edge cases like currency values and date formats natively. The tradeoff is vendor lock-in and a cold-start latency of ~3-5 seconds per call. I accepted that because accuracy on the primary path matters more than speed, and the Groq fallback covers the cases Azure misses rather than replacing it entirely.
+Groq's llama-4-scout vision model handles the full extraction in a single call — no prompt chaining, no separate OCR step. Responses come back in under 3 seconds on average, which keeps the upload-to-edit flow feeling fast. It performs well across diverse receipt formats including non-English receipts, unusual surcharge codes, and locale-specific number formats. The alternative was Azure Document Intelligence's prebuilt Receipt model, which returns typed fields with per-field confidence scores but costs more, adds vendor lock-in, and requires a separate API integration. The tradeoff with Groq is that a general vision LLM has more variance and can occasionally hallucinate structure — mitigated by a constrained prompt and 3 retries with exponential backoff. Cost is zero on the free tier.
 
-**2. Groq as fallback rather than running both in parallel**
+**2. Prompt-level filtering over post-processing**
 
-I only call Groq when Azure misses a critical field (merchant, total, or line items). Running both always and merging would give higher recall but doubles latency and cost on every request. The current approach keeps the fast path fast — most receipts fully succeed through Azure — and only pays the extra cost when it's actually needed. The merge logic prefers Groq's line items when it extracts more than Azure, so the fallback genuinely adds value rather than just patching one field.
+Summary rows (subtotal, cash, change) appear on almost every receipt and are not line items. I handle this in two places: the prompt explicitly tells the model to exclude them, and a server-side regex filter catches anything that slips through. The prompt-first approach means less post-processing code; the regex is a safety net, not the primary mechanism. The tradeoff is that prompt instructions aren't guaranteed — hence the fallback filter.
 
 **3. SQLite over Postgres**
 
@@ -75,20 +68,19 @@ For a local-first single-user tool, SQLite is the right fit. No server to run, n
 ## Where I Used an LLM
 
 - **Claude (Claude Code):** Used throughout for implementation — server routes, extraction pipeline, schema design, React components, and debugging. Drove all architecture and product decisions myself; Claude wrote the code.
-- **Azure Document Intelligence:** Primary receipt extraction — structured field extraction with confidence scores, no prompting required.
-- **Groq (llama-4-scout):** Fallback vision model when Azure misses fields. When invoked, it receives whatever Azure already extracted so it only fills the gaps rather than re-extracting everything. Iterated the prompt based on real failure cases: summary rows being included as line items, comma-separator currency misreads (24,000 IDR parsed as 24), non-standard surcharge codes like "SVG CHG" and "PB1" being dropped.
+- **Groq (llama-4-scout):** Receipt extraction. Wrote and iterated the prompt based on real failure cases: summary rows being included as line items, comma-separator currency misreads (24,000 IDR parsed as 24), non-standard surcharge codes like "SVG CHG" and "PB1" being dropped, and null fields crashing the Zod parser.
 
 ---
 
 ## What I'd Do With Another Week
 
-1. **Better currency handling.** Right now currency is extracted as a code (USD, IDR) but amounts aren't normalized. A receipt in IDR showing "24,000" might be parsed as 24 by a model that doesn't understand the locale. I'd add locale-aware amount parsing and store the raw string alongside the parsed number.
+1. **Better currency handling.** Currency is extracted as a code (USD, IDR) but amounts aren't normalized. A receipt in IDR showing "24,000" could be misread without locale context. I'd store the raw string alongside the parsed number and add locale-aware parsing.
 
 2. **Batch upload.** The current flow is one receipt at a time. Expense tracking is usually done in batches — you photograph 10 receipts after a trip. I'd add a queue with per-receipt status rather than blocking on each.
 
 3. **Export.** Saved receipts are only visible in the app. CSV or JSON export would make this actually useful for feeding into accounting tools or spreadsheets.
 
-4. **Receipt image preprocessing.** Currently images are only resized when they exceed Groq's request limit. Preprocessing all images before sending to Azure — deskewing, contrast enhancement, denoising — would improve OCR accuracy on low-quality or angled photos without relying on the fallback.
+4. **Receipt image preprocessing.** Images are only resized when they exceed Groq's request limit. Preprocessing all images — deskewing, contrast enhancement, denoising — would improve OCR accuracy on low-quality or angled photos before they even reach the model.
 
 ---
 
