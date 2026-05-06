@@ -116,15 +116,21 @@ Rules:
 
   const lineItems: LineItem[] = parsed.lineItems
     .filter((item) => item.name != null && item.name.trim() !== "" && !SUMMARY_PATTERN.test(item.name.trim()))
-    .map((item) => ({
-      id: uuidv4(),
-      name: item.name!,
-      quantity: item.quantity ?? undefined,
-      amount: item.amount,
-      type: item.type,
-      confidence: "high" as const,
-      rawText: item.rawText ?? undefined,
-    }));
+    .map((item) => {
+      const isLowConfidence =
+        item.amount === 0 ||
+        item.type === "other" ||
+        (item.name?.trim().length ?? 0) <= 1;
+      return {
+        id: uuidv4(),
+        name: item.name!,
+        quantity: item.quantity ?? undefined,
+        amount: item.amount,
+        type: item.type,
+        confidence: (isLowConfidence ? "low" : "high") as const,
+        rawText: item.rawText ?? undefined,
+      };
+    });
 
   return {
     merchant: parsed.merchant,

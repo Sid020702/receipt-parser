@@ -1,0 +1,8 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { useState } from "react";
+export function SavedReceipts({ receipts, onSelect, onDelete }) {
+    const [open, setOpen] = useState(false);
+    if (receipts.length === 0)
+        return null;
+    return (_jsxs("div", { className: "border-t border-gray-200 mt-10 pt-5", children: [_jsxs("button", { className: "text-sm font-medium text-gray-500 hover:text-gray-700 flex items-center gap-1.5", onClick: () => setOpen((o) => !o), children: [_jsx("span", { className: "text-xs", children: open ? "▾" : "▸" }), "Saved receipts (", receipts.length, ")"] }), open && (_jsx("div", { className: "mt-3 space-y-2", children: receipts.map((r) => (_jsxs("div", { className: "border border-gray-200 rounded-lg px-4 py-3 hover:bg-gray-50 hover:border-gray-300 transition-colors flex justify-between items-center gap-2", children: [_jsxs("button", { className: "flex-1 text-left flex justify-between items-center min-w-0", onClick: () => onSelect(r), children: [_jsxs("div", { className: "min-w-0", children: [_jsx("span", { className: "font-medium text-sm text-gray-900 truncate block", children: r.merchant || "Unknown merchant" }), _jsx("span", { className: "text-gray-400 text-xs", children: r.date })] }), _jsxs("span", { className: "text-gray-700 text-sm font-mono ml-4 shrink-0", children: [r.currency, " ", r.total.toFixed(2)] })] }), _jsx("button", { className: "shrink-0 text-gray-300 hover:text-red-500 transition-colors p-1 rounded", onClick: (e) => { e.stopPropagation(); onDelete(r.id); }, title: "Delete receipt", children: "\u2715" })] }, r.id))) }))] }));
+}
