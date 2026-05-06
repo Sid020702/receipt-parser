@@ -7,8 +7,12 @@ export function receiptsRouter(db: Database) {
   const app = new Hono();
 
   app.get("/", (c) => {
-    const receipts = getReceipts(db);
-    return c.json(receipts);
+    try {
+      const receipts = getReceipts(db);
+      return c.json(receipts);
+    } catch (err) {
+      return c.json({ error: "Failed to retrieve receipts" }, 500);
+    }
   });
 
   app.post("/", async (c) => {
@@ -24,11 +28,18 @@ export function receiptsRouter(db: Database) {
   app.put("/:id", async (c) => {
     const id = c.req.param("id");
     const body = await c.req.json();
+    const patch = ReceiptSchema.partial().safeParse(body);
+    if (!patch.success) {
+      return c.json({ error: "Invalid receipt data", details: patch.error.flatten() }, 400);
+    }
     try {
-      const updated = updateReceipt(db, id, body);
+      const updated = updateReceipt(db, id, patch.data);
       return c.json(updated);
     } catch (err) {
-      return c.json({ error: "Receipt not found" }, 404);
+      if (err instanceof Error && err.message.includes("not found")) {
+        return c.json({ error: "Receipt not found" }, 404);
+      }
+      return c.json({ error: "Internal server error" }, 500);
     }
   });
 
