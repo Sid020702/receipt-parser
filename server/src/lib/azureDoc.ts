@@ -24,6 +24,7 @@ export async function extractWithAzure(imageBuffer: Buffer, mimeType: string): P
 
   const client = new DocumentAnalysisClient(endpoint, new AzureKeyCredential(key));
 
+  try {
   const poller = await client.beginAnalyzeDocument("prebuilt-receipt", imageBuffer);
 
   const result = await poller.pollUntilDone();
@@ -128,9 +129,6 @@ export async function extractWithAzure(imageBuffer: Buffer, mimeType: string): P
   let currency = "USD";
   if (currencyField?.kind === "string" && typeof currencyField.value === "string") {
     currency = currencyField.value;
-  } else if (totalField?.kind === "currency" && totalField.value?.currencySymbol) {
-    // Some receipts encode currency via the currency symbol on the total field
-    currency = totalField.value.currencySymbol;
   }
 
   return {
@@ -143,4 +141,7 @@ export async function extractWithAzure(imageBuffer: Buffer, mimeType: string): P
     currency,
     hasLowConfidence,
   };
+  } catch (err) {
+    throw new Error(`Azure extraction failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }

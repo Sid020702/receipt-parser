@@ -8,7 +8,7 @@ const GroqReceiptSchema = z.object({
   date: z.string().nullable(),
   lineItems: z.array(z.object({
     name: z.string(),
-    amount: z.number(),
+    amount: z.number().finite(),
     type: z.enum(["item", "tax", "discount", "tip", "fee", "other"]),
     rawText: z.string().optional(),
   })),
@@ -69,10 +69,15 @@ Amounts must be positive numbers (discounts too — the UI will style them diffe
 
   const rawResponse = response.choices[0]?.message?.content ?? "";
 
-  // Strip markdown code fences if model wraps output
-  const jsonStr = rawResponse.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
+  if (!rawResponse) throw new Error("Groq returned empty response");
 
-  const parsed = GroqReceiptSchema.parse(JSON.parse(jsonStr));
+  let parsed: z.infer<typeof GroqReceiptSchema>;
+  try {
+    const jsonStr = rawResponse.slice(rawResponse.indexOf("{"), rawResponse.lastIndexOf("}") + 1);
+    parsed = GroqReceiptSchema.parse(JSON.parse(jsonStr));
+  } catch (err) {
+    throw new Error(`Groq response could not be parsed: ${rawResponse.slice(0, 200)}`);
+  }
 
   const lineItems: LineItem[] = parsed.lineItems.map((item) => ({
     id: uuidv4(),
