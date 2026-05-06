@@ -48,36 +48,50 @@ npm run dev
 - Frontend: http://localhost:5173
 - Backend: http://localhost:3001
 
-## Design Decisions
+---
 
-### Model choice: Azure Document Intelligence + Groq fallback
+## What I Built
 
-Azure's prebuilt Receipt model is purpose-built for receipts — it returns merchant, date, line items, and totals as typed fields with native per-field confidence scores, requiring no prompt engineering. At $0.001/page (500 free/month), it's cheaper and more accurate than general vision LLMs for this domain.
+A web app that takes a photo of a receipt and extracts structured data from it — merchant name, date, line items with quantities and types, total, and currency. It uses Azure Document Intelligence as the primary extractor and falls back to Groq (llama-4-scout) when Azure misses fields like merchant or returns low-confidence results. The extracted data is shown in an editable UI where users can correct any mistakes, reorder line items via drag and drop, and save to a local SQLite database. The frontend is React with Tailwind, the backend is Bun with Hono, and everything runs with a single `npm run dev`.
 
-Groq (llama-4-maverick, free tier) serves as fallback when Azure returns low-confidence or missing fields. It's the fastest inference available and costs nothing.
+---
 
-### What counts as a line item
+## Tradeoffs I'd Defend
 
-Everything: purchased items, taxes, tips, discounts, fees. Each line item has a `type` field (`item | tax | discount | tip | fee | other`) so the frontend can group and style them appropriately. Stripping tax/tip would lose data needed for expense tracking. The `other` category catches edge cases (bottle deposits, bag fees) and shows the raw receipt text in a tooltip so users know what they're correcting.
+**1. Azure Document Intelligence as primary extractor, not a general vision LLM**
 
-### Confidence highlighting
+Azure's prebuilt Receipt model returns typed, structured fields — merchant, date, line items, total — with per-field confidence scores, without any prompt engineering. A general vision LLM can hallucinate structure or misread amounts; Azure was trained specifically on receipts and handles edge cases like currency values and date formats natively. The tradeoff is vendor lock-in and a cold-start latency of ~3-5 seconds per call. I accepted that because accuracy on the primary path matters more than speed, and the Groq fallback covers the cases Azure misses rather than replacing it entirely.
 
-Fields with Azure confidence < 0.7, and all Groq-filled fields, are highlighted yellow with a tooltip: "Uncertain — please verify." Users see exactly what to review rather than checking everything blindly.
+**2. Groq as fallback rather than running both in parallel**
 
-### Error handling
+I only call Groq when Azure misses a critical field (merchant, total, or line items). Running both always and merging would give higher recall but doubles latency and cost on every request. The current approach keeps the fast path fast — most receipts fully succeed through Azure — and only pays the extra cost when it's actually needed. The merge logic prefers Groq's line items when it extracts more than Azure, so the fallback genuinely adds value rather than just patching one field.
 
-3 retries with exponential backoff (1s → 2s → 4s) on both Azure and Groq independently. If all fail, the app shows any raw model output and lets the user fill fields manually. We fail loudly — no silent data loss.
+**3. SQLite over Postgres**
 
-### Correction UX
+For a local-first single-user tool, SQLite is the right fit. No server to run, no connection pool to manage, zero ops overhead. `bun:sqlite` is built into the runtime — no native module compilation, no version mismatch. The tradeoff is that it doesn't scale to concurrent writes across multiple users, but that's not the problem being solved here. If this were a multi-user SaaS, I'd swap the DB layer — Zod schemas are the single source of truth, so that migration would be isolated to `db.ts`.
 
-The receipt image stays visible beside the editor at all times so users can cross-reference without scrolling. All fields are click-to-edit inline. The total auto-recalculates as line items change and shows a warning when it differs from the extracted value.
+---
 
-## Running Tests
+## Where I Used an LLM
 
-```bash
-# Server tests (schema validation, db round-trip, retry logic)
-cd server && bun test
+- **Claude (Claude Code):** Used throughout for implementation — server routes, extraction pipeline, schema design, React components, and debugging. Wrote the overall architecture and made all design decisions myself; Claude executed the code.
+- **Azure Document Intelligence:** Primary receipt extraction — structured field extraction with confidence scores, no prompting required.
+- **Groq (llama-4-scout):** Fallback vision model when Azure misses fields. Wrote the prompt myself, iterated on it based on real failure cases (summary rows being included as line items, comma-separator currency misreads, non-standard surcharge codes like "SVG CHG").
 
-# Client tests (total recalculation logic)
-cd client && bun run vitest run
-```
+---
+
+## What I'd Do With Another Week
+
+1. **Better currency handling.** Right now currency is extracted as a code (USD, IDR) but amounts aren't normalized. A receipt in IDR showing "24,000" might be parsed as 24 by a model that doesn't understand the locale. I'd add locale-aware amount parsing and store the raw string alongside the parsed number.
+
+2. **Batch upload.** The current flow is one receipt at a time. Expense tracking is usually done in batches — you photograph 10 receipts after a trip. I'd add a queue with per-receipt status rather than blocking on each.
+
+3. **Export.** Saved receipts are only visible in the app. CSV or JSON export would make this actually useful for feeding into accounting tools or spreadsheets.
+
+4. **Smarter merge logic.** The current Azure + Groq merge is naive — more items wins. A better approach would be field-level merging with confidence-weighted selection, and deduplication when both models extract the same line item with slightly different names.
+
+---
+
+## One Thing I'd Push Back On
+
+The spec asks for "inline review/correction UI" but doesn't say what happens after the user corrects and saves. There's no export, no integration, no way to get the data out of the app. If the goal is expense tracking, a receipt that's been reviewed and saved but is trapped in a local SQLite database hasn't actually solved the problem. I'd push back and ask: what does "done" look like for a receipt? Is there a downstream system — an accounting tool, a spreadsheet, an approval workflow? The correction UI is only valuable if the corrected data goes somewhere useful. Without that answer, there's a real risk of building a polished dead end.

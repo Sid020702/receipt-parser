@@ -70,8 +70,9 @@ export async function extractReceipt(
   const needsGroq =
     !azureResult ||
     azureResult.hasLowConfidence ||
-    (!azureResult.merchant && !azureResult.total && azureResult.lineItems.length === 0) ||
-    (!azureResult.total && azureResult.lineItems.length === 0);
+    azureResult.lineItems.length === 0 ||
+    !azureResult.total ||
+    !azureResult.merchant;
 
   console.log(`[extractor] Needs Groq fallback: ${needsGroq}`, !azureResult ? "(no azure result)" :
     `merchant=${azureResult.merchant}, total=${azureResult.total}, items=${azureResult.lineItems.length}, lowConf=${azureResult.hasLowConfidence}`);
@@ -103,7 +104,7 @@ export async function extractReceipt(
         date: "",
         lineItems: [],
         total: 0,
-        currency: "USD",
+        currency: "",
         parseStatus: "failed",
         imageUrl,
         rawLlmResponse: undefined,

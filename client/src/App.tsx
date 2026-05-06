@@ -144,7 +144,7 @@ export function App() {
       </div>
 
       {toast && (
-        <div className="fixed bottom-6 right-6 bg-gray-900 text-white px-4 py-2.5 rounded-lg shadow-lg text-sm">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-4 py-2.5 rounded-lg shadow-lg text-sm whitespace-nowrap">
           ✓ {toast}
         </div>
       )}

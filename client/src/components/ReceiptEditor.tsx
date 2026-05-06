@@ -138,6 +138,16 @@ export function ReceiptEditor({ receipt, imageUrl, onSave, isSaving }: Props) {
         <div>
           <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Total</label>
           <div className="flex items-center gap-3 flex-wrap">
+            <ConfidenceTag confidence={draft.currency ? "high" : "low"}>
+              <input
+                className="w-16 border-b border-transparent hover:border-gray-300 focus:border-blue-400 outline-none py-1 bg-transparent text-sm font-mono uppercase"
+                value={draft.currency}
+                placeholder="CCY"
+                maxLength={3}
+                onChange={(e) => setDraft((d) => ({ ...d, currency: e.target.value.toUpperCase() }))}
+                title="Currency code (e.g. USD, IDR, EUR)"
+              />
+            </ConfidenceTag>
             <input
               className="w-32 text-xl font-bold border-b border-transparent hover:border-gray-300 focus:border-blue-400 outline-none py-1 bg-transparent"
               type="number"

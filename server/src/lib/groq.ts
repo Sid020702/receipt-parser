@@ -1,7 +1,23 @@
 import Groq from "groq-sdk";
 import { z } from "zod";
+import sharp from "sharp";
 import type { LineItem } from "../types";
 import { v4 as uuidv4 } from "uuid";
+
+const MAX_GROQ_BYTES = 3 * 1024 * 1024; // 3MB base64 budget
+
+async function compressForGroq(imageBuffer: Buffer, mimeType: string): Promise<{ buffer: Buffer; mimeType: string }> {
+  const sizeAsBase64 = Math.ceil(imageBuffer.length * 4 / 3);
+  if (sizeAsBase64 <= MAX_GROQ_BYTES) return { buffer: imageBuffer, mimeType };
+
+  console.log(`[groq] Image too large (${imageBuffer.length} bytes), compressing...`);
+  const compressed = await sharp(imageBuffer)
+    .resize({ width: 1600, withoutEnlargement: true })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+  console.log(`[groq] Compressed to ${compressed.length} bytes`);
+  return { buffer: compressed, mimeType: "image/jpeg" };
+}
 
 const GroqReceiptSchema = z.object({
   merchant: z.string().nullable(),
@@ -14,7 +30,7 @@ const GroqReceiptSchema = z.object({
     rawText: z.string().nullable().optional(),
   })),
   total: z.number().nullable(),
-  currency: z.string().default("USD"),
+  currency: z.string().default(""),
 });
 
 export interface GroqExtractResult {
@@ -32,8 +48,9 @@ export async function extractWithGroq(imageBuffer: Buffer, mimeType: string): Pr
   console.log(`[groq] API key: ${apiKey.slice(0, 8)}...`);
 
   const client = new Groq({ apiKey });
-  const base64 = imageBuffer.toString("base64");
-  const dataUrl = `data:${mimeType};base64,${base64}`;
+  const { buffer: sendBuffer, mimeType: sendMime } = await compressForGroq(imageBuffer, mimeType);
+  const base64 = sendBuffer.toString("base64");
+  const dataUrl = `data:${sendMime};base64,${base64}`;
 
   const prompt = `You are a receipt parser. Extract ALL information from this receipt image.
 Return ONLY valid JSON matching this exact structure, no markdown, no explanation:
@@ -50,7 +67,7 @@ Return ONLY valid JSON matching this exact structure, no markdown, no explanatio
     }
   ],
   "total": 0.00 or null,
-  "currency": "USD"
+  "currency": "USD or IDR or EUR etc, or empty string if unknown"
 }
 Rules:
 - EXCLUDE summary/metadata rows: subtotal, total, grand total, total sales, total items, cash tendered, change, balance due, amount due. These are not line items.

@@ -137,8 +137,8 @@ export async function extractWithAzure(imageBuffer: Buffer, mimeType: string): P
     total = totalField.value;
   }
 
-  // Extract currency: the Currency field is a string field; fallback to USD
-  let currency = "USD";
+  // Extract currency: the Currency field is a string field; fallback to empty (unknown)
+  let currency = "";
   if (currencyField?.kind === "string" && typeof currencyField.value === "string") {
     currency = currencyField.value;
   }
