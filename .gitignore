@@ -3,6 +3,7 @@ node_modules/
 server/data/
 server/uploads/
 dist/
+client/dist/
 *.db
 .claude/
 docs/
