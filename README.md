@@ -74,9 +74,9 @@ For a local-first single-user tool, SQLite is the right fit. No server to run, n
 
 ## Where I Used an LLM
 
-- **Claude (Claude Code):** Used throughout for implementation — server routes, extraction pipeline, schema design, React components, and debugging. Wrote the overall architecture and made all design decisions myself; Claude executed the code.
+- **Claude (Claude Code):** Used throughout for implementation — server routes, extraction pipeline, schema design, React components, and debugging. Drove all architecture and product decisions myself; Claude wrote the code.
 - **Azure Document Intelligence:** Primary receipt extraction — structured field extraction with confidence scores, no prompting required.
-- **Groq (llama-4-scout):** Fallback vision model when Azure misses fields. Wrote the prompt myself, iterated on it based on real failure cases (summary rows being included as line items, comma-separator currency misreads, non-standard surcharge codes like "SVG CHG").
+- **Groq (llama-4-scout):** Fallback vision model when Azure misses fields. When invoked, it receives whatever Azure already extracted so it only fills the gaps rather than re-extracting everything. Iterated the prompt based on real failure cases: summary rows being included as line items, comma-separator currency misreads (24,000 IDR parsed as 24), non-standard surcharge codes like "SVG CHG" and "PB1" being dropped.
 
 ---
 
@@ -88,7 +88,7 @@ For a local-first single-user tool, SQLite is the right fit. No server to run, n
 
 3. **Export.** Saved receipts are only visible in the app. CSV or JSON export would make this actually useful for feeding into accounting tools or spreadsheets.
 
-4. **Smarter merge logic.** The current Azure + Groq merge is naive — more items wins. A better approach would be field-level merging with confidence-weighted selection, and deduplication when both models extract the same line item with slightly different names.
+4. **Receipt image preprocessing.** Currently images are only resized when they exceed Groq's request limit. Preprocessing all images before sending to Azure — deskewing, contrast enhancement, denoising — would improve OCR accuracy on low-quality or angled photos without relying on the fallback.
 
 ---
 

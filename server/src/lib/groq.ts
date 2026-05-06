@@ -42,7 +42,15 @@ export interface GroqExtractResult {
   rawResponse: string;
 }
 
-export async function extractWithGroq(imageBuffer: Buffer, mimeType: string): Promise<GroqExtractResult> {
+export interface AzurePartial {
+  merchant: string | null;
+  date: string | null;
+  total: number | null;
+  currency: string;
+  lineItems: LineItem[];
+}
+
+export async function extractWithGroq(imageBuffer: Buffer, mimeType: string, azurePartial?: AzurePartial): Promise<GroqExtractResult> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error("Groq API key not configured");
   console.log(`[groq] API key: ${apiKey.slice(0, 8)}...`);
@@ -52,7 +60,18 @@ export async function extractWithGroq(imageBuffer: Buffer, mimeType: string): Pr
   const base64 = sendBuffer.toString("base64");
   const dataUrl = `data:${sendMime};base64,${base64}`;
 
-  const prompt = `You are a receipt parser. Extract ALL information from this receipt image.
+  const alreadyKnown: string[] = [];
+  if (azurePartial?.merchant) alreadyKnown.push(`- Merchant: "${azurePartial.merchant}" (already extracted, return as-is)`);
+  if (azurePartial?.date) alreadyKnown.push(`- Date: "${azurePartial.date}" (already extracted, return as-is)`);
+  if (azurePartial?.total) alreadyKnown.push(`- Total: ${azurePartial.total} (already extracted, return as-is)`);
+  if (azurePartial?.currency) alreadyKnown.push(`- Currency: "${azurePartial.currency}" (already extracted, return as-is)`);
+  if (azurePartial?.lineItems.length) alreadyKnown.push(`- Line items: already extracted ${azurePartial.lineItems.length} items — return null for lineItems to reuse them, unless you can extract more`);
+
+  const knownSection = alreadyKnown.length > 0
+    ? `\nA previous extraction already found:\n${alreadyKnown.join("\n")}\nFocus on filling in the missing fields. Do not contradict what was already found.\n`
+    : "";
+
+  const prompt = `You are a receipt parser. Extract ALL information from this receipt image.${knownSection}
 Return ONLY valid JSON matching this exact structure, no markdown, no explanation:
 {
   "merchant": "string or null",

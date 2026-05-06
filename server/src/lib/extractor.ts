@@ -1,5 +1,5 @@
 import { extractWithAzure, type AzureExtractResult } from "./azureDoc";
-import { extractWithGroq, type GroqExtractResult } from "./groq";
+import { extractWithGroq, type GroqExtractResult, type AzurePartial } from "./groq";
 import type { LineItem, Receipt } from "../types";
 
 export async function withRetry<T>(
@@ -83,7 +83,8 @@ export async function extractReceipt(
   if (needsGroq) {
     try {
       console.log("[extractor] Calling Groq fallback...");
-      groqResult = await withRetry(() => extractWithGroq(imageBuffer, mimeType), 3);
+      const azurePartial: AzurePartial | undefined = azureResult ?? undefined;
+      groqResult = await withRetry(() => extractWithGroq(imageBuffer, mimeType, azurePartial), 3);
       rawLlmResponse = groqResult.rawResponse;
       console.log("[extractor] Groq result:", JSON.stringify({
         merchant: groqResult.merchant,
