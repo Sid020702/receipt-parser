@@ -4,7 +4,8 @@ const TOLERANCE = 0.05;
 
 export function calcTotal(items: LineItem[]): number {
   const sum = items.reduce((acc, item) => {
-    return item.type === "discount" ? acc - item.amount : acc + item.amount;
+    const lineTotal = item.amount * (item.quantity ?? 1);
+    return item.type === "discount" ? acc - lineTotal : acc + lineTotal;
   }, 0);
   return Math.round(sum * 100) / 100;
 }

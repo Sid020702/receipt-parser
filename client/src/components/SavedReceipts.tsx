@@ -4,9 +4,10 @@ import type { Receipt } from "../lib/api";
 interface Props {
   receipts: Receipt[];
   onSelect: (receipt: Receipt) => void;
+  onDelete: (id: string) => void;
 }
 
-export function SavedReceipts({ receipts, onSelect }: Props) {
+export function SavedReceipts({ receipts, onSelect, onDelete }: Props) {
   const [open, setOpen] = useState(false);
 
   if (receipts.length === 0) return null;
@@ -23,17 +24,28 @@ export function SavedReceipts({ receipts, onSelect }: Props) {
       {open && (
         <div className="mt-3 space-y-2">
           {receipts.map((r) => (
-            <button
+            <div
               key={r.id}
-              className="w-full text-left border border-gray-200 rounded-lg px-4 py-3 hover:bg-gray-50 hover:border-gray-300 transition-colors flex justify-between items-center"
-              onClick={() => onSelect(r)}
+              className="border border-gray-200 rounded-lg px-4 py-3 hover:bg-gray-50 hover:border-gray-300 transition-colors flex justify-between items-center gap-2"
             >
-              <div className="min-w-0">
-                <span className="font-medium text-sm text-gray-900 truncate block">{r.merchant || "Unknown merchant"}</span>
-                <span className="text-gray-400 text-xs">{r.date}</span>
-              </div>
-              <span className="text-gray-700 text-sm font-mono ml-4 shrink-0">{r.currency} {r.total.toFixed(2)}</span>
-            </button>
+              <button
+                className="flex-1 text-left flex justify-between items-center min-w-0"
+                onClick={() => onSelect(r)}
+              >
+                <div className="min-w-0">
+                  <span className="font-medium text-sm text-gray-900 truncate block">{r.merchant || "Unknown merchant"}</span>
+                  <span className="text-gray-400 text-xs">{r.date}</span>
+                </div>
+                <span className="text-gray-700 text-sm font-mono ml-4 shrink-0">{r.currency} {r.total.toFixed(2)}</span>
+              </button>
+              <button
+                className="shrink-0 text-gray-300 hover:text-red-500 transition-colors p-1 rounded"
+                onClick={(e) => { e.stopPropagation(); onDelete(r.id); }}
+                title="Delete receipt"
+              >
+                ✕
+              </button>
+            </div>
           ))}
         </div>
       )}

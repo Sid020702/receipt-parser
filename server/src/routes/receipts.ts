@@ -25,6 +25,16 @@ export function receiptsRouter(db: Database) {
     return c.json({ id: parsed.data.id }, 201);
   });
 
+  app.delete("/:id", (c) => {
+    const id = c.req.param("id");
+    try {
+      db.prepare("DELETE FROM receipts WHERE id = ?").run(id);
+      return c.json({ ok: true });
+    } catch (err) {
+      return c.json({ error: "Failed to delete receipt" }, 500);
+    }
+  });
+
   app.put("/:id", async (c) => {
     const id = c.req.param("id");
     const body = await c.req.json();

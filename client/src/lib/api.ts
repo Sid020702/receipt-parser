@@ -5,6 +5,7 @@ export type ParseStatus = "success" | "processing" | "failed";
 export interface LineItem {
   id: string;
   name: string;
+  quantity?: number;
   amount: number;
   type: LineItemType;
   confidence: Confidence;
@@ -47,6 +48,11 @@ export async function saveReceipt(receipt: Receipt): Promise<{ id: string }> {
   });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
+}
+
+export async function deleteReceipt(id: string): Promise<void> {
+  const res = await fetch(`/api/receipts/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await res.text());
 }
 
 export async function updateReceipt(id: string, patch: Partial<Receipt>): Promise<Receipt> {

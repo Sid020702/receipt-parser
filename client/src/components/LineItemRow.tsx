@@ -50,6 +50,20 @@ export function LineItemRow({ item, onChange, onDelete }: Props) {
         onChange={(e) => onChange({ ...item, name: e.target.value })}
       />
 
+      <input
+        className="w-10 text-center border-b border-transparent hover:border-gray-300 focus:border-blue-400 outline-none text-sm py-0.5 bg-transparent text-gray-500"
+        type="number"
+        min="1"
+        step="1"
+        placeholder="qty"
+        value={item.quantity ?? ""}
+        onChange={(e) => {
+          const val = parseInt(e.target.value);
+          onChange({ ...item, quantity: val > 0 ? val : undefined });
+        }}
+        title="Quantity"
+      />
+
       <select
         className="text-xs border rounded px-1 py-0.5 bg-white text-gray-600"
         value={item.type}

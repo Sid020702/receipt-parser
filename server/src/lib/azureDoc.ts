@@ -18,6 +18,7 @@ export async function extractWithAzure(imageBuffer: Buffer, mimeType: string): P
   const key = process.env.AZURE_DOC_INTELLIGENCE_KEY;
 
   if (!endpoint || !key) throw new Error("Azure credentials not configured");
+  console.log(`[azure] Endpoint: ${endpoint.slice(0, 40)}... Key: ${key.slice(0, 6)}...`);
 
   // mimeType is accepted for documentation purposes; the SDK infers content type from the body stream
   void mimeType;
@@ -25,9 +26,12 @@ export async function extractWithAzure(imageBuffer: Buffer, mimeType: string): P
   const client = new DocumentAnalysisClient(endpoint, new AzureKeyCredential(key));
 
   try {
+  console.log("[azure] Starting document analysis with prebuilt-receipt model...");
   const poller = await client.beginAnalyzeDocument("prebuilt-receipt", imageBuffer);
 
+  console.log("[azure] Polling until done...");
   const result = await poller.pollUntilDone();
+  console.log(`[azure] Analysis complete. Documents found: ${result.documents?.length ?? 0}`);
   const doc = result.documents?.[0];
 
   if (!doc) throw new Error("Azure returned no document");
@@ -57,6 +61,7 @@ export async function extractWithAzure(imageBuffer: Buffer, mimeType: string): P
       const totalPriceField = f["TotalPrice"];
       const priceField = f["Price"];
       const amountField = totalPriceField ?? priceField;
+      const quantityField = f["Quantity"];
       // Currency fields have a CurrencyValue with .amount; number fields have .value directly
       let amount = 0;
       if (amountField?.kind === "currency" && amountField.value != null) {
@@ -66,12 +71,19 @@ export async function extractWithAzure(imageBuffer: Buffer, mimeType: string): P
       } else if (amountField?.value != null) {
         amount = parseFloat(String((amountField as { value: unknown }).value)) || 0;
       }
+      let quantity: number | undefined;
+      if (quantityField?.kind === "number" && quantityField.value != null) {
+        quantity = quantityField.value;
+      } else if (quantityField?.value != null) {
+        quantity = parseFloat(String((quantityField as { value: unknown }).value)) || undefined;
+      }
       const itemConf = conf(
         Math.min(descField?.confidence ?? 1, amountField?.confidence ?? 1)
       );
       lineItems.push({
         id: uuidv4(),
         name: description,
+        quantity,
         amount,
         type: "item",
         confidence: itemConf,
@@ -142,6 +154,7 @@ export async function extractWithAzure(imageBuffer: Buffer, mimeType: string): P
     hasLowConfidence,
   };
   } catch (err) {
+    console.error("[azure] Raw error:", err);
     throw new Error(`Azure extraction failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }

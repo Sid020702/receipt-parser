@@ -3,6 +3,7 @@ import { z } from "zod";
 export const LineItemSchema = z.object({
   id: z.string(),
   name: z.string(),
+  quantity: z.number().positive().optional(),
   amount: z.number().finite(),
   type: z.enum(["item", "tax", "discount", "tip", "fee", "other"]),
   confidence: z.enum(["high", "low"]),

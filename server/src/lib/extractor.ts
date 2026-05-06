@@ -31,7 +31,7 @@ export function mergeResults(azure: AzureExtractResult, groq: GroqExtractResult)
   return {
     merchant: azure.merchant ?? groq.merchant,
     date: azure.date ?? groq.date,
-    lineItems: azure.lineItems.length > 0 ? azure.lineItems : groq.lineItems,
+    lineItems: groq.lineItems.length > azure.lineItems.length ? groq.lineItems : azure.lineItems.length > 0 ? azure.lineItems : groq.lineItems,
     total: azure.total ?? groq.total,
     currency: azure.currency || groq.currency,
   };
@@ -46,35 +46,57 @@ export async function extractReceipt(
   mimeType: string,
   imageUrl: string
 ): Promise<ExtractReceiptResult> {
+  console.log(`[extractor] Starting extraction for ${imageUrl} (${imageBuffer.length} bytes, ${mimeType})`);
+
   let azureResult: AzureExtractResult | null = null;
   let azureError: Error | null = null;
 
   try {
+    console.log("[extractor] Calling Azure Document Intelligence...");
     azureResult = await withRetry(() => extractWithAzure(imageBuffer, mimeType), 3);
+    console.log("[extractor] Azure result:", JSON.stringify({
+      merchant: azureResult.merchant,
+      date: azureResult.date,
+      total: azureResult.total,
+      currency: azureResult.currency,
+      lineItemCount: azureResult.lineItems.length,
+      hasLowConfidence: azureResult.hasLowConfidence,
+    }));
   } catch (err) {
     azureError = err instanceof Error ? err : new Error(String(err));
+    console.error("[extractor] Azure failed:", azureError.message);
   }
 
   const needsGroq =
     !azureResult ||
     azureResult.hasLowConfidence ||
-    !azureResult.merchant ||
-    !azureResult.total ||
-    azureResult.lineItems.length === 0;
+    (!azureResult.merchant && !azureResult.total && azureResult.lineItems.length === 0) ||
+    (!azureResult.total && azureResult.lineItems.length === 0);
+
+  console.log(`[extractor] Needs Groq fallback: ${needsGroq}`, !azureResult ? "(no azure result)" :
+    `merchant=${azureResult.merchant}, total=${azureResult.total}, items=${azureResult.lineItems.length}, lowConf=${azureResult.hasLowConfidence}`);
 
   let groqResult: GroqExtractResult | null = null;
   let rawLlmResponse: string | undefined;
 
   if (needsGroq) {
     try {
+      console.log("[extractor] Calling Groq fallback...");
       groqResult = await withRetry(() => extractWithGroq(imageBuffer, mimeType), 3);
       rawLlmResponse = groqResult.rawResponse;
-    } catch {
-      // Groq also failed — will return failed status below
+      console.log("[extractor] Groq result:", JSON.stringify({
+        merchant: groqResult.merchant,
+        date: groqResult.date,
+        total: groqResult.total,
+        lineItemCount: groqResult.lineItems.length,
+      }));
+    } catch (err) {
+      console.error("[extractor] Groq also failed:", err instanceof Error ? err.message : String(err));
     }
   }
 
   if (!azureResult && !groqResult) {
+    console.error("[extractor] Both Azure and Groq failed — returning failed status");
     return {
       receipt: {
         merchant: "",

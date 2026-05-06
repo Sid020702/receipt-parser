@@ -7,10 +7,11 @@ const GroqReceiptSchema = z.object({
   merchant: z.string().nullable(),
   date: z.string().nullable(),
   lineItems: z.array(z.object({
-    name: z.string(),
+    name: z.string().nullable(),
+    quantity: z.number().positive().nullable().optional(),
     amount: z.number().finite(),
     type: z.enum(["item", "tax", "discount", "tip", "fee", "other"]),
-    rawText: z.string().optional(),
+    rawText: z.string().nullable().optional(),
   })),
   total: z.number().nullable(),
   currency: z.string().default("USD"),
@@ -28,12 +29,13 @@ export interface GroqExtractResult {
 export async function extractWithGroq(imageBuffer: Buffer, mimeType: string): Promise<GroqExtractResult> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error("Groq API key not configured");
+  console.log(`[groq] API key: ${apiKey.slice(0, 8)}...`);
 
   const client = new Groq({ apiKey });
   const base64 = imageBuffer.toString("base64");
   const dataUrl = `data:${mimeType};base64,${base64}`;
 
-  const prompt = `You are a receipt parser. Extract all information from this receipt image.
+  const prompt = `You are a receipt parser. Extract ALL information from this receipt image.
 Return ONLY valid JSON matching this exact structure, no markdown, no explanation:
 {
   "merchant": "string or null",
@@ -41,20 +43,31 @@ Return ONLY valid JSON matching this exact structure, no markdown, no explanatio
   "lineItems": [
     {
       "name": "item name",
+      "quantity": 1,
       "amount": 0.00,
       "type": "item|tax|discount|tip|fee|other",
-      "rawText": "original text if type is other"
+      "rawText": "original text from receipt if type is other"
     }
   ],
   "total": 0.00 or null,
   "currency": "USD"
 }
-Include ALL line items: purchased items, taxes, tips, discounts, fees.
-Use type "other" for anything that doesn't clearly fit the other categories, and include rawText.
-Amounts must be positive numbers (discounts too — the UI will style them differently by type).`;
+Rules:
+- EXCLUDE summary/metadata rows: subtotal, total, grand total, total sales, total items, cash tendered, change, balance due, amount due. These are not line items.
+- INCLUDE only actual charges: purchased products/services, taxes, tips, discounts, fees, surcharges.
+- Use type "item" for purchased products/services.
+- Use type "tax" for GST, VAT, sales tax, or any tax charge.
+- Use type "discount" for any reduction, savings, or promotional amount.
+- Use type "tip" for gratuity or service tip.
+- Use type "fee" for delivery, service, convenience, or surcharge fees.
+- Use type "other" for ANYTHING else that is an actual charge — surcharges, levies, loyalty adjustments, codes like "SVG CHG", "PB1", percentage charges. Always include rawText for "other" items.
+- Include "quantity" if explicitly shown on the receipt (e.g. "2x", "Qty: 3"). Omit if not shown.
+- "amount" is the line total (quantity × unit price), not the unit price.
+- Amounts must be positive numbers (discounts too).
+- If the receipt uses comma as thousands separator (e.g. "24,000" means twenty-four thousand), parse accordingly — "24,000" = 24000, not 24.`;
 
   const response = await client.chat.completions.create({
-    model: "meta-llama/llama-4-maverick-17b-128e-instruct",
+    model: "meta-llama/llama-4-scout-17b-16e-instruct",
     messages: [
       {
         role: "user",
@@ -68,6 +81,8 @@ Amounts must be positive numbers (discounts too — the UI will style them diffe
   });
 
   const rawResponse = response.choices[0]?.message?.content ?? "";
+  console.log(`[groq] Raw response length: ${rawResponse.length}`);
+  console.log(`[groq] Raw response preview: ${rawResponse.slice(0, 300)}`);
 
   if (!rawResponse) throw new Error("Groq returned empty response");
 
@@ -76,17 +91,23 @@ Amounts must be positive numbers (discounts too — the UI will style them diffe
     const jsonStr = rawResponse.slice(rawResponse.indexOf("{"), rawResponse.lastIndexOf("}") + 1);
     parsed = GroqReceiptSchema.parse(JSON.parse(jsonStr));
   } catch (err) {
+    console.error("[groq] Parse error:", err instanceof Error ? err.message : String(err));
     throw new Error(`Groq response could not be parsed: ${rawResponse.slice(0, 200)}`);
   }
 
-  const lineItems: LineItem[] = parsed.lineItems.map((item) => ({
-    id: uuidv4(),
-    name: item.name,
-    amount: item.amount,
-    type: item.type,
-    confidence: "low" as const,
-    rawText: item.rawText,
-  }));
+  const SUMMARY_PATTERN = /^(sub\s*total|total\s*sales|total\s*items?|grand\s*total|amount\s*due|balance\s*due|cash(\s*tendered)?|change|net\s*total)$/i;
+
+  const lineItems: LineItem[] = parsed.lineItems
+    .filter((item) => item.name != null && item.name.trim() !== "" && !SUMMARY_PATTERN.test(item.name.trim()))
+    .map((item) => ({
+      id: uuidv4(),
+      name: item.name!,
+      quantity: item.quantity ?? undefined,
+      amount: item.amount,
+      type: item.type,
+      confidence: "low" as const,
+      rawText: item.rawText ?? undefined,
+    }));
 
   return {
     merchant: parsed.merchant,

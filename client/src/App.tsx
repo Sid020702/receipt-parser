@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { UploadZone } from "./components/UploadZone";
 import { ReceiptEditor } from "./components/ReceiptEditor";
 import { SavedReceipts } from "./components/SavedReceipts";
-import { parseReceipt, getReceipts, saveReceipt, updateReceipt, type Receipt } from "./lib/api";
+import { parseReceipt, getReceipts, saveReceipt, updateReceipt, deleteReceipt, type Receipt } from "./lib/api";
 
 type AppState = "idle" | "parsing" | "editing" | "saving";
 
@@ -30,6 +30,9 @@ export function App() {
     try {
       const parsed = await parseReceipt(file);
       setReceipt(parsed);
+      if (parsed.parseStatus !== "failed") {
+        setSavedReceipts((prev) => [parsed, ...prev]);
+      }
       setState("editing");
     } catch {
       setError("Failed to parse receipt. Please try again.");
@@ -63,6 +66,16 @@ export function App() {
     setImagePreview(r.imageUrl);
     setState("editing");
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      await deleteReceipt(id);
+      setSavedReceipts((prev) => prev.filter((r) => r.id !== id));
+      if (receipt?.id === id) handleReset();
+    } catch {
+      setError("Failed to delete receipt.");
+    }
   }
 
   function handleReset() {
@@ -127,7 +140,7 @@ export function App() {
           </div>
         )}
 
-        <SavedReceipts receipts={savedReceipts} onSelect={handleSelectSaved} />
+        <SavedReceipts receipts={savedReceipts} onSelect={handleSelectSaved} onDelete={handleDelete} />
       </div>
 
       {toast && (
